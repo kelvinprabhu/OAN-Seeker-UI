@@ -82,7 +82,7 @@ const Home = () => {
           {t("home.selectLocation", "Please select your location")}
         </Typography>
         <Typography variant="h6" sx={{ textAlign: "left", fontSize: "14px" }}>
-          {t("home.state", "State")} <span style={{ color: "red" }}>*</span>
+          {t("home.state", "State")} hello <span style={{ color: "red" }}>*</span>
         </Typography>
         <Autocomplete
           options={states}
