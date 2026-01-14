@@ -17,9 +17,9 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { LocationContext } from "../context/LocationContext";
 import { LanguageContext } from "../context/LanguageContext";
-
-const STATES_API = "https://oan-weather-seeker-api.tekdinext.com/location/states";
-const DISTRICTS_API = "https://oan-weather-seeker-api.tekdinext.com/location/districts";
+const BASE_URL = "http://127.0.0.1:8000"
+const STATES_API = BASE_URL +"/api/v1/states/";
+const DISTRICTS_API = BASE_URL + "/api/v1/districts";
 
 const LocationPopup = ({ open, onClose, onLocationSelect }) => {
   const { t } = useTranslation();

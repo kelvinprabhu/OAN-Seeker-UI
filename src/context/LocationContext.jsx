@@ -8,7 +8,7 @@ export const LocationProvider = ({ children }) => {
     const storedLocation = sessionStorage.getItem("location");
     return storedLocation
       ? JSON.parse(storedLocation)
-      : { selectedState: "", selectedDistrict: "" };
+      : { selectedState: "Maharashtra", selectedDistrict: "Pune" };
   });
 
   // Update both the state and sessionStorage

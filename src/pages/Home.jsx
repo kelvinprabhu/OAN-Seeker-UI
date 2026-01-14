@@ -14,8 +14,9 @@ import { useTranslation } from "react-i18next";
 import { LocationContext } from "../context/LocationContext";
 import { LanguageContext } from "../context/LanguageContext";
 
-const STATES_API = "https://oan-weather-seeker-api.tekdinext.com/location/states";
-const DISTRICTS_API = "https://oan-weather-seeker-api.tekdinext.com/location/districts";
+const BASE_URL = "http://127.0.0.1:8000"
+const STATES_API = BASE_URL +"/api/v1/states/";
+const DISTRICTS_API = BASE_URL + "/api/v1/districts";
 
 const Home = () => {
   const { t } = useTranslation();
@@ -82,7 +83,7 @@ const Home = () => {
           {t("home.selectLocation", "Please select your location")}
         </Typography>
         <Typography variant="h6" sx={{ textAlign: "left", fontSize: "14px" }}>
-          {t("home.state", "State")} hello <span style={{ color: "red" }}>*</span>
+          {t("home.state", "State")} <span style={{ color: "red" }}>*</span>
         </Typography>
         <Autocomplete
           options={states}
