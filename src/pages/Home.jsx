@@ -14,9 +14,8 @@ import { useTranslation } from "react-i18next";
 import { LocationContext } from "../context/LocationContext";
 import { LanguageContext } from "../context/LanguageContext";
 
-const BASE_URL = "http://127.0.0.1:8000"
-const STATES_API = BASE_URL +"/api/v1/states/";
-const DISTRICTS_API = BASE_URL + "/api/v1/districts";
+const STATES_API = import.meta.env.VITE_STATES_API_URL;
+const DISTRICTS_API = import.meta.env.VITE_DISTRICTS_API_URL;
 
 const Home = () => {
   const { t } = useTranslation();

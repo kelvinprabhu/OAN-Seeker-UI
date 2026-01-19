@@ -1,12 +1,11 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
 
 const WEATHER_API_URL = import.meta.env.VITE_WEATHER_API_URL;
-const AIBOT_API_URL = import.meta.env.VITE_AIBOT_API_URL || `${BASE_URL}/api/chat/`;
-const SEARCH_API_URL = import.meta.env.VITE_SEARCH_API_URL || `${BASE_URL}/api/suggest/`;
-const TRANSCRIBE_API_URL = import.meta.env.VITE_TRANSCRIBE_API_URL || `${BASE_URL}/api/transcribe/`;
-const TTS_API_URL = import.meta.env.VITE_TTS_API_URL || `${BASE_URL}/api/tts/`;
+const AIBOT_API_URL = import.meta.env.VITE_AIBOT_API_URL;
+const SEARCH_API_URL = import.meta.env.VITE_SEARCH_API_URL;
+const TRANSCRIBE_API_URL = import.meta.env.VITE_TRANSCRIBE_API_URL;
+const TTS_API_URL = import.meta.env.VITE_TTS_API_URL;
 
 const cleanResponseText = (text) => {
   const lines = text.split("\n");
