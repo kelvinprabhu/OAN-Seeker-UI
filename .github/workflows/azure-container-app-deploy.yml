@@ -1,0 +1,91 @@
+name: Deploy UI to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  AZURE_CONTAINER_APP_NAME: oan-ui-function
+  RESOURCE_GROUP: OAN-Org
+  ACR_NAME: oanmockserver
+  IMAGE_NAME: oan-seeker-ui
+  # Backend API URLs
+  VITE_WEATHER_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/weather/weatherUI/"
+  VITE_SEARCH_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/schemes/"
+  VITE_STATES_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/states/"
+  VITE_DISTRICTS_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/districts/"
+  VITE_AIBOT_API_URL: "https://oan-ai-function.politecoast-f62ee001.uaenorth.azurecontainerapps.io/chat"
+  VITE_TRANSCRIBE_API_URL: "https://oan-ai-function.politecoast-f62ee001.uaenorth.azurecontainerapps.io/transcribe"
+  VITE_TTS_API_URL: "https://oan-ai-function.politecoast-f62ee001.uaenorth.azurecontainerapps.io/tts"
+  VITE_MANDI_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/mandi/"
+  VITE_MANDI_GOV_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/mandi-gov/"
+  VITE_WAREHOUSE_API_URL: "https://oan-mock-server-e9egafdybcd4eah8.uaenorth-01.azurewebsites.net/api/v1/warehouse/"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Azure Container Registry
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ secrets.ACR_LOGIN_SERVER }} \
+            --username ${{ secrets.ACR_USERNAME }} \
+            --password-stdin
+
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE_TAG="${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest"
+          IMAGE_TAG_SHA="${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          
+          docker build \
+            -f Dockerfile \
+            -t ${IMAGE_TAG} \
+            -t ${IMAGE_TAG_SHA} \
+            --build-arg VITE_WEATHER_API_URL="${{ env.VITE_WEATHER_API_URL }}" \
+            --build-arg VITE_AIBOT_API_URL="${{ env.VITE_AIBOT_API_URL }}" \
+            --build-arg VITE_SEARCH_API_URL="${{ env.VITE_SEARCH_API_URL }}" \
+            --build-arg VITE_TRANSCRIBE_API_URL="${{ env.VITE_TRANSCRIBE_API_URL }}" \
+            --build-arg VITE_TTS_API_URL="${{ env.VITE_TTS_API_URL }}" \
+            --build-arg VITE_STATES_API_URL="${{ env.VITE_STATES_API_URL }}" \
+            --build-arg VITE_DISTRICTS_API_URL="${{ env.VITE_DISTRICTS_API_URL }}" \
+            --build-arg VITE_MANDI_API_URL="${{ env.VITE_MANDI_API_URL }}" \
+            --build-arg VITE_MANDI_GOV_API_URL="${{ env.VITE_MANDI_GOV_API_URL }}" \
+            --build-arg VITE_WAREHOUSE_API_URL="${{ env.VITE_WAREHOUSE_API_URL }}" \
+            .
+          
+          docker push ${IMAGE_TAG_SHA}
+          docker push ${IMAGE_TAG}
+          
+          echo "IMAGE_TAG=${IMAGE_TAG_SHA}" >> $GITHUB_ENV
+
+      - name: Deploy to Azure Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.IMAGE_TAG }}
+          
+          echo " Container App updated with new image"
+
+      - name: Get Container App URL
+        run: |
+          APP_URL=$(az containerapp show \
+            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)
+          
+          echo " Deployment successful!"
+          echo "Your app is available at: https://${APP_URL}"
+          echo "Image: ${{ env.IMAGE_TAG }}"
