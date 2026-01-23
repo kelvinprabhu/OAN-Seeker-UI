@@ -1,0 +1,62 @@
+# Stage 1: Build the React application
+FROM node:18-alpine AS build
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy all source files
+COPY . .
+
+# Build arguments for environment variables
+ARG VITE_WEATHER_API_URL
+ARG VITE_AIBOT_API_URL
+ARG VITE_SEARCH_API_URL
+ARG VITE_TRANSCRIBE_API_URL
+ARG VITE_TTS_API_URL
+ARG VITE_STATES_API_URL
+ARG VITE_DISTRICTS_API_URL
+
+# Set environment variables for build
+ENV VITE_WEATHER_API_URL=$VITE_WEATHER_API_URL
+ENV VITE_AIBOT_API_URL=$VITE_AIBOT_API_URL
+ENV VITE_SEARCH_API_URL=$VITE_SEARCH_API_URL
+ENV VITE_TRANSCRIBE_API_URL=$VITE_TRANSCRIBE_API_URL
+ENV VITE_TTS_API_URL=$VITE_TTS_API_URL
+ENV VITE_STATES_API_URL=$VITE_STATES_API_URL
+ENV VITE_DISTRICTS_API_URL=$VITE_DISTRICTS_API_URL
+
+# Build the application
+RUN npm run build
+
+# Stage 2: Azure Functions Runtime
+FROM mcr.microsoft.com/azure-functions/node:4-node18
+
+# Set working directory
+WORKDIR /home/site/wwwroot
+
+# Copy built React app
+COPY --from=build /app/dist ./dist
+
+# Copy Azure Functions files
+COPY host.json ./
+COPY StaticFileServer ./StaticFileServer
+
+# Copy package files and install ONLY the runtime dependencies
+COPY package.json package-lock.json ./
+
+# Install only mime-types (needed by the function)
+RUN npm install --production mime-types
+
+# Set Azure Functions environment variables
+ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
+    AzureFunctionsJobHost__Logging__Console__IsEnabled=true \
+    FUNCTIONS_WORKER_RUNTIME=node
+
+# Expose port 80
+EXPOSE 80
