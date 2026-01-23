@@ -42,11 +42,11 @@ export const fetchWeather = async (selectedDistrict) => {
       { headers: { "Content-Type": "application/json" } }
     );
     const rawItems = response.data?.responses?.[0]?.message?.catalog?.providers?.[0]?.items || [];
-    
+
     // Sanitize items to match UI expectations:
     // 1. "Current Weather" (or non-forecast item) should be at index 0.
     // 2. All subsequent items must contain "Forecast for ".
-    
+
     // Find valid forecasts
     const forecasts = rawItems.filter(item => item?.descriptor?.name?.includes("Forecast for "));
     // Find current weather (any item that isn't a forecast)
@@ -58,7 +58,7 @@ export const fetchWeather = async (selectedDistrict) => {
     }
     // Append forecasts
     sanitizedItems.push(...forecasts);
-    console.log("weather",sanitizedItems)
+    console.log("weather", sanitizedItems)
     return sanitizedItems;
   } catch (error) {
     console.error("Error fetching weather, falling back to demo data:", error);
@@ -69,7 +69,7 @@ export const fetchWeather = async (selectedDistrict) => {
 export const fetchSchemes = async () => {
   try {
     const response = await axios.post(
-      SEARCH_API_URL, 
+      SEARCH_API_URL + "schemaui",
       {},
       { headers: { "Content-Type": "application/json" } }
     );
@@ -108,7 +108,7 @@ export const sendQueryToBot = async (
   audio
 ) => {
   setLoading(true);
-  
+
   // Add initial "Typing..." or placeholder message
   setMessages((prev) => {
     if (prev.length > 0 && prev[prev.length - 1].text.startsWith("Typing")) {
@@ -127,20 +127,20 @@ export const sendQueryToBot = async (
     if (audio) {
       try {
         const transcribeResponse = await axios.post(
-          TRANSCRIBE_API_URL, 
-          { 
+          TRANSCRIBE_API_URL,
+          {
             audio_content: audio,
-            session_id: "session_" + Date.now() 
+            session_id: "session_" + Date.now()
           },
           { headers: { "Content-Type": "application/json" } }
         );
-        
+
         const tData = transcribeResponse.data;
         if (tData.status === 'error') {
-           throw new Error(tData.message || "Transcription failed");
+          throw new Error(tData.message || "Transcription failed");
         }
         textToChat = tData.text;
-        
+
         if (!textToChat) {
           throw new Error("Could not transcribe audio (no text returned).");
         }
@@ -151,7 +151,7 @@ export const sendQueryToBot = async (
     }
 
     if (!textToChat) {
-        throw new Error("No query provided.");
+      throw new Error("No query provided.");
     }
 
     // 2. Send Chat Request (Using standard fetch for streaming support)
@@ -170,26 +170,26 @@ export const sendQueryToBot = async (
     });
 
     if (!response.ok) {
-       throw new Error(`Bot API returned error: ${response.statusText}`);
+      throw new Error(`Bot API returned error: ${response.statusText}`);
     }
 
     // 3. Handle Streaming Response
     // We update the UI incrementally as data arrives
     let fullText = "";
-    
+
     await readStream(response, (currentText) => {
-        fullText = currentText;
-        setMessages((prev) => {
-            const updatedMessages = prev.slice(0, -1);
-            return [
-                ...updatedMessages,
-                {
-                    text: cleanResponseText(fullText), // Clean in real-time or just at end? cleanliness might be tricky during stream
-                    sender: "bot",
-                    isStreaming: true
-                }
-            ];
-        });
+      fullText = currentText;
+      setMessages((prev) => {
+        const updatedMessages = prev.slice(0, -1);
+        return [
+          ...updatedMessages,
+          {
+            text: cleanResponseText(fullText), // Clean in real-time or just at end? cleanliness might be tricky during stream
+            sender: "bot",
+            isStreaming: true
+          }
+        ];
+      });
     });
 
     // Final clean and update
@@ -207,7 +207,7 @@ export const sendQueryToBot = async (
       ];
     });
 
-    return { response: finalCleanedText }; 
+    return { response: finalCleanedText };
 
   } catch (error) {
     console.error("Bot API Error:", error);
