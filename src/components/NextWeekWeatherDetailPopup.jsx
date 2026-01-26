@@ -104,7 +104,7 @@ const NextWeekWeatherDetailPopup = ({
 
     // Build chart data
     const dataForChart = dailyForecasts.map((item) => {
-      const parts = item.descriptor.name.split(" ");
+      const parts = item.descriptor?.name?.split(" ") || [];
       // parts[3] might be "06:00:00"
       const timeStr = parts[3] || "";
       // Convert "06:00" to "6:00 AM"
@@ -120,7 +120,7 @@ const NextWeekWeatherDetailPopup = ({
       );
       const windTag = item.tags?.[0]?.list?.find(
         (t) => t.descriptor.code === "Wind-Speed"
-      );      
+      );
 
       const temperatureValue = tempTag ? parseFloat(tempTag.value) : null;
       const humidityValue = humTag ? parseFloat(humTag.value) : null;

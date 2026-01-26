@@ -111,10 +111,10 @@ const NextWeekWeather = ({ weatherData }) => {
       </Tabs>
 
       {displayForecasts.map((item, index) => {
-        const temperatureObj = item.forecast.tags?.[0]?.list.find(
+        const temperatureObj = item.forecast.tags?.[0]?.list?.find(
           (t) => t.descriptor.code === "Temperature"
         );
-        const temperature = temperatureObj
+        const temperature = temperatureObj && temperatureObj.value !== "N/A"
           ? parseFloat(temperatureObj.value)
           : null;
         const dateObj = new Date(item.date);

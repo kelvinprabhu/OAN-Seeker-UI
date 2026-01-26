@@ -42,10 +42,12 @@ const CurrentWeather = ({ widgetData, allForecastData }) => {
   const [openPopup, setOpenPopup] = useState(false);
   const { location } = useContext(LocationContext); // consume location from context
 
-  if (!widgetData)
+  if (!widgetData || !widgetData[0])
     return <Box>{t("currentWeather.noData", "No data available")}</Box>;
 
-  const { short_desc, long_desc } = widgetData[0].descriptor;
+  const descriptor = widgetData[0].descriptor || {};
+  const short_desc = descriptor.short_desc || "Clear";
+  const long_desc = descriptor.long_desc || "No detailed description available";
 
   const temperatureMatch = long_desc.match(/Temperature: ([\d.]+)°C/);
   const humidityMatch = long_desc.match(/Humidity: (\d+)%/);
@@ -156,60 +158,60 @@ const CurrentWeather = ({ widgetData, allForecastData }) => {
       </Box>
 
       <Box
-  sx={{
-    border: "1px solid #f7e6c4",
-    borderRadius: "12px",
-    padding: "12px",
-    mt: 3,
-  }}
->
-  <Grid container spacing={2} justifyContent="space-around">
-    <Grid item xs={5}>
-      <Box sx={{ display: "flex", alignItems: "center" }}>
-        <img
-          src={humidityIcon}
-          alt="Humidity Icon"
-          style={{
-            width: "28px",
-            height: "28px",
-            marginRight: "8px",
-            marginBottom: "1rem",
-          }}
-        />
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            {t("currentWeather.humidity", "Humidity")}
-          </Typography>
-          <Typography variant="h6" fontWeight="500" fontSize={"20px"}>
-            {humidity}%
-          </Typography>
-        </Box>
+        sx={{
+          border: "1px solid #f7e6c4",
+          borderRadius: "12px",
+          padding: "12px",
+          mt: 3,
+        }}
+      >
+        <Grid container spacing={2} justifyContent="space-around">
+          <Grid item xs={5}>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <img
+                src={humidityIcon}
+                alt="Humidity Icon"
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  marginRight: "8px",
+                  marginBottom: "1rem",
+                }}
+              />
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  {t("currentWeather.humidity", "Humidity")}
+                </Typography>
+                <Typography variant="h6" fontWeight="500" fontSize={"20px"}>
+                  {humidity}%
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+          <Grid item xs={5}>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <img
+                src={windIcon}
+                alt="Wind Icon"
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  marginRight: "8px",
+                  marginBottom: "1.5rem",
+                }}
+              />
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  {t("currentWeather.wind", "Wind")}
+                </Typography>
+                <Typography variant="h6" fontWeight="500" fontSize={"20px"}>
+                  {wholeWindSpeed} km/h
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+        </Grid>
       </Box>
-    </Grid>
-    <Grid item xs={5}>
-      <Box sx={{ display: "flex", alignItems: "center" }}>
-        <img
-          src={windIcon}
-          alt="Wind Icon"
-          style={{
-            width: "28px",
-            height: "28px",
-            marginRight: "8px",
-            marginBottom: "1.5rem",
-          }}
-        />
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            {t("currentWeather.wind", "Wind")}
-          </Typography>
-          <Typography variant="h6" fontWeight="500" fontSize={"20px"}>
-            {wholeWindSpeed} km/h
-          </Typography>
-        </Box>
-      </Box>
-    </Grid>
-  </Grid>
-</Box>
 
       <CurrentWeatherPopup
         open={openPopup}
