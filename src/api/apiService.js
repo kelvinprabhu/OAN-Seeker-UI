@@ -30,7 +30,11 @@ const getDemoWeatherData = (selectedDistrict) => {
 
   // Create current weather item
   const currentItem = {
-    descriptor: { name: "Current Weather" },
+    descriptor: {
+      name: "Current Weather",
+      short_desc: "Sunny",
+      long_desc: `Temperature: 28°C\nHumidity: 45%\nWind Speed: 3.3 m/s`,
+    },
     tags: [
       {
         list: [
@@ -54,7 +58,11 @@ const getDemoWeatherData = (selectedDistrict) => {
 
     // Morning forecast
     items.push({
-      descriptor: { name: `Forecast for ${dateStr} 09:00:00` },
+      descriptor: {
+        name: `Forecast for ${dateStr} 09:00:00`,
+        short_desc: "Partly Cloudy",
+        long_desc: `Temperature: 24°C\nHumidity: 50%\nWind Speed: 2.8 m/s`,
+      },
       tags: [
         {
           list: [
@@ -68,7 +76,11 @@ const getDemoWeatherData = (selectedDistrict) => {
 
     // Evening forecast
     items.push({
-      descriptor: { name: `Forecast for ${dateStr} 18:00:00` },
+      descriptor: {
+        name: `Forecast for ${dateStr} 18:00:00`,
+        short_desc: "Clear",
+        long_desc: `Temperature: 32°C\nHumidity: 40%\nWind Speed: 4.2 m/s`,
+      },
       tags: [
         {
           list: [
@@ -82,6 +94,40 @@ const getDemoWeatherData = (selectedDistrict) => {
   }
 
   return items;
+};
+
+const normalizeWeatherData = (item) => {
+  if (!item.descriptor) item.descriptor = {};
+  if (!item.descriptor.name) item.descriptor.name = "";
+
+  // If short_desc is missing, derive it from descriptor name or default to 'Clear'
+  if (!item.descriptor.short_desc) {
+    item.descriptor.short_desc = item.descriptor.name.includes("Forecast") ? "Partly Cloudy" : "Sunny";
+  }
+
+  // If long_desc is missing, construct it from tags if they exist
+  if (!item.descriptor.long_desc && item.tags && item.tags[0] && item.tags[0].list) {
+    const tags = item.tags[0].list;
+    const temp = tags.find(t => t.descriptor.code === "Temperature" || t.descriptor.code === "Max-Temp")?.value || "28";
+    const humidity = tags.find(t => t.descriptor.code === "Humidity")?.value || "45";
+    const wind = tags.find(t => t.descriptor.code === "Wind-Speed")?.value || "3.3";
+
+    // Clean values (remove units if they exist in tags, as the parser adds its own)
+    const cleanTemp = temp.replace(/[^\d.]/g, '');
+    const cleanHumidity = humidity.replace(/[^\d.]/g, '');
+    const cleanWind = wind.replace(/[^\d.]/g, '');
+
+    // Convert wind to m/s if it looks like km/h (basic heuristic)
+    let windMS = parseFloat(cleanWind);
+    if (windMS > 10) windMS = windMS / 3.6; // Assuming it was km/h
+
+    item.descriptor.long_desc = `Temperature: ${cleanTemp}°C\nHumidity: ${cleanHumidity}%\nWind Speed: ${windMS.toFixed(1)} m/s`;
+  } else if (!item.descriptor.long_desc) {
+    // Ultimate fallback string
+    item.descriptor.long_desc = "Temperature: 28°C\nHumidity: 45%\nWind Speed: 3.3 m/s";
+  }
+
+  return item;
 };
 
 const getDemoSchemesData = () => {
@@ -158,13 +204,16 @@ export const fetchWeather = async (selectedDistrict) => {
     // Append forecasts
     sanitizedItems.push(...forecasts);
 
-    // Fallback if sanitization results in empty data
-    if (sanitizedItems.length === 0) {
+    // Normalize each item to ensure it has the fields the UI expects
+    const normalizedItems = sanitizedItems.map(normalizeWeatherData);
+
+    // Fallback if normalization results in empty data
+    if (normalizedItems.length === 0) {
       return getDemoWeatherData(selectedDistrict);
     }
 
-    console.log("weather", sanitizedItems)
-    return sanitizedItems;
+    console.log("weather", normalizedItems)
+    return normalizedItems;
   } catch (error) {
     console.error("Error fetching weather, falling back to demo data:", error);
     return getDemoWeatherData(selectedDistrict);
