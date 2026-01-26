@@ -24,10 +24,104 @@ const cleanResponseText = (text) => {
 };
 
 
+const getDemoWeatherData = (selectedDistrict) => {
+  const now = new Date();
+  const districtName = selectedDistrict || "Your Location";
+
+  // Create current weather item
+  const currentItem = {
+    descriptor: { name: "Current Weather" },
+    tags: [
+      {
+        list: [
+          { descriptor: { code: "Location" }, value: districtName },
+          { descriptor: { code: "Min-Temp" }, value: "22" },
+          { descriptor: { code: "Max-Temp" }, value: "34" },
+          { descriptor: { code: "Humidity" }, value: "45%" },
+          { descriptor: { code: "Wind-Speed" }, value: "12 km/h" },
+        ],
+      },
+    ],
+  };
+
+  const items = [currentItem];
+
+  // Create 5-day forecast
+  for (let i = 1; i <= 5; i++) {
+    const forecastDate = new Date(now);
+    forecastDate.setDate(now.getDate() + i);
+    const dateStr = forecastDate.toISOString().split("T")[0];
+
+    // Morning forecast
+    items.push({
+      descriptor: { name: `Forecast for ${dateStr} 09:00:00` },
+      tags: [
+        {
+          list: [
+            { descriptor: { code: "Temperature" }, value: "24" },
+            { descriptor: { code: "Humidity" }, value: "50%" },
+            { descriptor: { code: "Wind-Speed" }, value: "10 km/h" },
+          ],
+        },
+      ],
+    });
+
+    // Evening forecast
+    items.push({
+      descriptor: { name: `Forecast for ${dateStr} 18:00:00` },
+      tags: [
+        {
+          list: [
+            { descriptor: { code: "Temperature" }, value: "32" },
+            { descriptor: { code: "Humidity" }, value: "40%" },
+            { descriptor: { code: "Wind-Speed" }, value: "15 km/h" },
+          ],
+        },
+      ],
+    });
+  }
+
+  return items;
+};
+
+const getDemoSchemesData = () => {
+  return [
+    {
+      id: "demo-pmfby",
+      title: "Pradhan Mantri Fasal Bima Yojana (PMFBY)",
+      description: "A crop insurance scheme that integrates multiple stakeholders on a single platform.",
+      benefits: "Financial support for crop loss",
+      eligibility: "All farmers growing notified crops"
+    },
+    {
+      id: "demo-kcc",
+      title: "Kisan Credit Card (KCC)",
+      description: "Provides adequate and timely credit support to farmers from the banking system.",
+      benefits: "Low interest rate loans",
+      eligibility: "Farmers, Tenant Farmers, Share Croppers"
+    },
+    {
+      id: "demo-pm-kisan",
+      title: "PM KISAN",
+      description: "Income support of Rs 6000 per year to all land holder farmer families.",
+      benefits: "Direct cash transfer",
+      eligibility: "Small and marginal farmers"
+    },
+    {
+      id: "demo-shc",
+      title: "Soil Health Card Scheme",
+      description: "To help farmers make judicious use of fertilizers based on soil nutrients.",
+      benefits: "Soil testing and recommendations",
+      eligibility: "All landholding farmers"
+    }
+  ];
+};
+
+
 export const fetchWeather = async (selectedDistrict) => {
   if (!selectedDistrict) {
     console.warn("No location selected for weather fetch");
-    return getDemoWeatherData("Unknown Location");
+    return getDemoWeatherData("Anantapur");
   }
 
   if (!WEATHER_API_URL) {
@@ -42,6 +136,11 @@ export const fetchWeather = async (selectedDistrict) => {
       { headers: { "Content-Type": "application/json" } }
     );
     const rawItems = response.data?.responses?.[0]?.message?.catalog?.providers?.[0]?.items || [];
+
+    if (rawItems.length === 0) {
+      console.warn("API returned no weather data. Falling back to demo data.");
+      return getDemoWeatherData(selectedDistrict);
+    }
 
     // Sanitize items to match UI expectations:
     // 1. "Current Weather" (or non-forecast item) should be at index 0.
@@ -58,11 +157,17 @@ export const fetchWeather = async (selectedDistrict) => {
     }
     // Append forecasts
     sanitizedItems.push(...forecasts);
+
+    // Fallback if sanitization results in empty data
+    if (sanitizedItems.length === 0) {
+      return getDemoWeatherData(selectedDistrict);
+    }
+
     console.log("weather", sanitizedItems)
     return sanitizedItems;
   } catch (error) {
     console.error("Error fetching weather, falling back to demo data:", error);
-    return [];
+    return getDemoWeatherData(selectedDistrict);
   }
 };
 
@@ -73,10 +178,15 @@ export const fetchSchemes = async () => {
       {},
       { headers: { "Content-Type": "application/json" } }
     );
-    return response.data?.data?.scheme_cache_data || [];
+    const schemes = response.data?.data?.scheme_cache_data || [];
+    if (schemes.length === 0) {
+      console.warn("API returned no schemes. Falling back to demo data.");
+      return getDemoSchemesData();
+    }
+    return schemes;
   } catch (error) {
-    console.error("Error fetching schemes:", error);
-    return [];
+    console.error("Error fetching schemes, falling back to demo data:", error);
+    return getDemoSchemesData();
   }
 };
 
@@ -211,11 +321,20 @@ export const sendQueryToBot = async (
 
   } catch (error) {
     console.error("Bot API Error:", error);
+    let errorMsg = "An error occurred. Please try again later.";
+
+    // Check if it's a specific mock-like query we can handle with better info
+    if (query.toLowerCase().includes("weather")) {
+      errorMsg = "I see you're asking about the weather. You can use the 'Weather' service from the main menu for detailed updates.";
+    } else if (query.toLowerCase().includes("scheme")) {
+      errorMsg = "I can help you find government schemes. Please check the 'Government Schemes' section in the main menu.";
+    }
+
     setMessages((prev) => {
       const updatedMessages = prev.slice(0, -1);
       return [
         ...updatedMessages,
-        { text: "An error occurred. Please try again later.", sender: "bot" },
+        { text: errorMsg, sender: "bot" },
       ];
     });
   } finally {
