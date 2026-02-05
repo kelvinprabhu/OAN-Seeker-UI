@@ -1,0 +1,136 @@
+name: Deploy UI to AWS ECS with EC2
+
+on:
+  push:
+    branches:
+      - main
+      - devops
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1  # Change to your preferred region
+  ECR_REPOSITORY: oan-seeker-ui
+  ECS_CLUSTER: oan-cluster
+  ECS_SERVICE: oan-ui-service
+  ECS_TASK_DEFINITION: oan-ui-task
+  CONTAINER_NAME: oan-seeker-ui-container
+  
+  # Backend API URLs - Update these with your actual backend URLs
+  VITE_WEATHER_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/weather/weatherUI/"
+  VITE_SEARCH_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/schemes/"
+  VITE_STATES_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/states/"
+  VITE_DISTRICTS_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/districts"
+  VITE_AIBOT_API_URL: "https://oan-ai-function.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/chat/"
+  VITE_TRANSCRIBE_API_URL: "https://oan-ai-function.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/transcribe/"
+  VITE_TTS_API_URL: "https://oan-ai-function.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/tts/"
+  VITE_MANDI_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/mandi/"
+  VITE_MANDI_GOV_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/mandi-gov/"
+  VITE_WAREHOUSE_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/warehouse/"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Docker Image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build Docker image with all environment variables
+          docker build \
+            -f Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --build-arg VITE_WEATHER_API_URL="${{ env.VITE_WEATHER_API_URL }}" \
+            --build-arg VITE_AIBOT_API_URL="${{ env.VITE_AIBOT_API_URL }}" \
+            --build-arg VITE_SEARCH_API_URL="${{ env.VITE_SEARCH_API_URL }}" \
+            --build-arg VITE_TRANSCRIBE_API_URL="${{ env.VITE_TRANSCRIBE_API_URL }}" \
+            --build-arg VITE_TTS_API_URL="${{ env.VITE_TTS_API_URL }}" \
+            --build-arg VITE_STATES_API_URL="${{ env.VITE_STATES_API_URL }}" \
+            --build-arg VITE_DISTRICTS_API_URL="${{ env.VITE_DISTRICTS_API_URL }}" \
+            --build-arg VITE_MANDI_API_URL="${{ env.VITE_MANDI_API_URL }}" \
+            --build-arg VITE_MANDI_GOV_API_URL="${{ env.VITE_MANDI_GOV_API_URL }}" \
+            --build-arg VITE_WAREHOUSE_API_URL="${{ env.VITE_WAREHOUSE_API_URL }}" \
+            .
+          
+          # Push both tags to ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          # Output the image URI for next steps
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "Image pushed to ECR: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Download Current Task Definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --query taskDefinition > task-definition.json
+          
+          echo "Current task definition downloaded"
+
+      - name: Update Task Definition with New Image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Get Deployment Information
+        run: |
+          # Get the service details
+          SERVICE_INFO=$(aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0]')
+          
+          RUNNING_COUNT=$(echo $SERVICE_INFO | jq -r '.runningCount')
+          DESIRED_COUNT=$(echo $SERVICE_INFO | jq -r '.desiredCount')
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo " Deployment Successful!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo " Image: ${{ steps.build-image.outputs.image }}"
+          echo " Cluster: ${{ env.ECS_CLUSTER }}"
+          echo "  Service: ${{ env.ECS_SERVICE }}"
+          echo " Running Tasks: $RUNNING_COUNT/$DESIRED_COUNT"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo " To access your application:"
+          echo "   1. Get the Load Balancer DNS from AWS Console"
+          echo "   2. Or use the EC2 instance public IP"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo " Deployment completed successfully!"
+          else
+            echo " Deployment failed. Check the logs above for details."
+          fi
