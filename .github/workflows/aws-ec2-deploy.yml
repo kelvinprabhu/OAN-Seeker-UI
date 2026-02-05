@@ -1,4 +1,4 @@
-name: Deploy UI to AWS EC2
+name: Deploy Seeker UI to AWS EC2
 
 on:
   push:
@@ -10,6 +10,7 @@ on:
 env:
   AWS_REGION: ap-south-1
   ECR_REPOSITORY: oan
+  SERVICE_NAME: oan-seeker-ui
   CONTAINER_NAME: oan-seeker-ui-container
   
   # Backend API URLs
@@ -45,16 +46,17 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag, and Push Docker Image to ECR
+      - name: Build, Tag, Push Docker Image
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
+          echo "Building image for: $SERVICE_NAME"
+
           docker build \
             -f Dockerfile \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -t $SERVICE_NAME \
             --build-arg VITE_WEATHER_API_URL="${{ env.VITE_WEATHER_API_URL }}" \
             --build-arg VITE_AIBOT_API_URL="${{ env.VITE_AIBOT_API_URL }}" \
             --build-arg VITE_SEARCH_API_URL="${{ env.VITE_SEARCH_API_URL }}" \
@@ -66,11 +68,16 @@ jobs:
             --build-arg VITE_MANDI_GOV_API_URL="${{ env.VITE_MANDI_GOV_API_URL }}" \
             --build-arg VITE_WAREHOUSE_API_URL="${{ env.VITE_WAREHOUSE_API_URL }}" \
             .
-          
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+          # Tag with service-specific names
+          docker tag $SERVICE_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY:$SERVICE_NAME-$IMAGE_TAG
+          docker tag $SERVICE_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY:$SERVICE_NAME-latest
+
+          # Push to ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SERVICE_NAME-$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SERVICE_NAME-latest
+
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$SERVICE_NAME-latest" >> $GITHUB_OUTPUT
 
   deploy-to-ec2:
     needs: build-and-push
@@ -82,15 +89,18 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: AWS_REGION,ECR_REPOSITORY,CONTAINER_NAME
+          envs: AWS_REGION,ECR_REPOSITORY,SERVICE_NAME,CONTAINER_NAME
           script: |
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$SERVICE_NAME-latest"
+
             # Login to ECR
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
             
-            # Pull the latest image
-            docker pull $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+            # Pull UI image
+            docker pull $IMAGE_URI
             
-            # Stop and remove existing container if it exists
+            # Stop and remove existing container
             docker stop $CONTAINER_NAME || true
             docker rm $CONTAINER_NAME || true
             
@@ -99,4 +109,7 @@ jobs:
               --name $CONTAINER_NAME \
               -p 80:80 \
               --restart always \
-              $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+              $IMAGE_URI
+
+            docker image prune -f
+
