@@ -1,4 +1,4 @@
-name: Deploy UI to AWS ECS with EC2
+name: Deploy UI to AWS EC2
 
 on:
   push:
@@ -8,14 +8,11 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1  # Change to your preferred region
-  ECR_REPOSITORY: oan-seeker-ui
-  ECS_CLUSTER: oan-cluster
-  ECS_SERVICE: oan-ui-service
-  ECS_TASK_DEFINITION: oan-ui-task
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: oan
   CONTAINER_NAME: oan-seeker-ui-container
   
-  # Backend API URLs - Update these with your actual backend URLs
+  # Backend API URLs
   VITE_WEATHER_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/weather/weatherUI/"
   VITE_SEARCH_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/schemes/"
   VITE_STATES_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/states/"
@@ -28,8 +25,10 @@ env:
   VITE_WAREHOUSE_API_URL: "https://oan-mock-server.politecoast-f62ee001.uaenorth.azurecontainerapps.io/api/v1/warehouse/"
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
     
     steps:
       - name: Checkout Code
@@ -52,7 +51,6 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build Docker image with all environment variables
           docker build \
             -f Dockerfile \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
@@ -69,68 +67,36 @@ jobs:
             --build-arg VITE_WAREHOUSE_API_URL="${{ env.VITE_WAREHOUSE_API_URL }}" \
             .
           
-          # Push both tags to ECR
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           
-          # Output the image URI for next steps
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-          echo "Image pushed to ECR: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      - name: Download Current Task Definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
-            --query taskDefinition > task-definition.json
-          
-          echo "Current task definition downloaded"
-
-      - name: Update Task Definition with New Image
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          task-definition: task-definition.json
-          container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.build-image.outputs.image }}
-
-      - name: Deploy to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-      - name: Get Deployment Information
-        run: |
-          # Get the service details
-          SERVICE_INFO=$(aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }} \
-            --query 'services[0]')
-          
-          RUNNING_COUNT=$(echo $SERVICE_INFO | jq -r '.runningCount')
-          DESIRED_COUNT=$(echo $SERVICE_INFO | jq -r '.desiredCount')
-          
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo " Deployment Successful!"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo " Image: ${{ steps.build-image.outputs.image }}"
-          echo " Cluster: ${{ env.ECS_CLUSTER }}"
-          echo "  Service: ${{ env.ECS_SERVICE }}"
-          echo " Running Tasks: $RUNNING_COUNT/$DESIRED_COUNT"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo " To access your application:"
-          echo "   1. Get the Load Balancer DNS from AWS Console"
-          echo "   2. Or use the EC2 instance public IP"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-      - name: Deployment Summary
-        if: always()
-        run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo " Deployment completed successfully!"
-          else
-            echo " Deployment failed. Check the logs above for details."
-          fi
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: AWS_REGION,ECR_REPOSITORY,CONTAINER_NAME
+          script: |
+            # Login to ECR
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
+            
+            # Pull the latest image
+            docker pull $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+            
+            # Stop and remove existing container if it exists
+            docker stop $CONTAINER_NAME || true
+            docker rm $CONTAINER_NAME || true
+            
+            # Run the new container
+            docker run -d \
+              --name $CONTAINER_NAME \
+              -p 80:80 \
+              --restart always \
+              $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
