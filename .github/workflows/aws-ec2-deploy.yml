@@ -79,37 +79,4 @@ jobs:
 
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$SERVICE_NAME-latest" >> $GITHUB_OUTPUT
 
-  deploy-to-ec2:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: AWS_REGION,ECR_REPOSITORY,SERVICE_NAME,CONTAINER_NAME
-          script: |
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$SERVICE_NAME-latest"
-
-            # Login to ECR
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-            
-            # Pull UI image
-            docker pull $IMAGE_URI
-            
-            # Stop and remove existing container
-            docker stop $CONTAINER_NAME || true
-            docker rm $CONTAINER_NAME || true
-            
-            # Run the new container
-            docker run -d \
-              --name $CONTAINER_NAME \
-              -p 80:80 \
-              --restart always \
-              $IMAGE_URI
-
-            docker image prune -f
-
+  
